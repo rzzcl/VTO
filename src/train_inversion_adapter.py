@@ -15,7 +15,8 @@ import torchvision
 import transformers
 from accelerate import Accelerator
 from accelerate.logging import get_logger
-from diffusers import DDPMScheduler, UNet2DConditionModel, DDIMScheduler, StableDiffusionInpaintPipeline, AutoencoderKL
+from models.unet_2d_condition import UNet2DConditionModel
+from diffusers import DDPMScheduler, DDIMScheduler, StableDiffusionInpaintPipeline, AutoencoderKL
 from diffusers.optimization import get_scheduler
 from diffusers.utils import check_min_version
 from diffusers.utils.import_utils import is_xformers_available

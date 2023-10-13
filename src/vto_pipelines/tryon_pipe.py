@@ -12,7 +12,8 @@ sys.path.insert(0, str(PROJECT_ROOT))
 import PIL
 import torch
 from diffusers.configuration_utils import FrozenDict
-from diffusers.models import AutoencoderKL, UNet2DConditionModel
+from models.unet_2d_condition import UNet2DConditionModel
+from diffusers.models import AutoencoderKL
 from diffusers.pipeline_utils import DiffusionPipeline
 from diffusers.pipelines.stable_diffusion import StableDiffusionPipelineOutput
 from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_inpaint import prepare_mask_and_masked_image
