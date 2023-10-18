@@ -3,8 +3,13 @@ from torch.nn import functional as F
 import torch
 from torchvision import models
 import torchvision
+from typing import List,Optional,Dict
 
 
+#个人认为这里有几个点可以进行调整
+#1.这里普通的卷积块更换成ResnetBlock会更好，残差块目前用的用的还是很普遍的
+#2.BatchNorm建议换成GroupNorm,num_groups=32就行，这个目前在知乎上的看的，就是建议使用GroupNorm
+#3.激活函数可以使用Relu，但是目前看人家的代码里用的Silu比较多，所以这里可以改可以不改，无所谓，我感觉这个也无高下之分吧
 class conv_block(nn.Module):
     def __init__(self,ch_in,ch_out):
         super(conv_block,self).__init__()
@@ -20,6 +25,10 @@ class conv_block(nn.Module):
         x = self.conv(x)
         return x
 
+#从代码的可读性来看，你这里使用了一个up_conv,那最好对应的设置相应的下采样块，个人认为会更好。
+#从你UNET里的内容来看，你是MaxPool做的下采样，但是我看一般diffusion的代码都是会用卷积做下采样比较多就是卷积核大小3，padding 1 ，stride为2，但是这个不强制
+#BatchNorm建议换一下，然后激活函数随意
+#核心一点还是建议写一个单独下采样块，这样个人感觉代码可读性会好一点，后续修改可能也简单一点
 class up_conv(nn.Module):
     def __init__(self,ch_in,ch_out):
         super(up_conv,self).__init__()
@@ -34,6 +43,7 @@ class up_conv(nn.Module):
         x = self.up(x)
         return x
 
+#这个attention 代码有问题，建议修改
 class Attention_block(nn.Module):
     def __init__(self, F_g, F_l, F_int):
         super(Attention_block, self).__init__()
@@ -67,7 +77,8 @@ class Attention_block(nn.Module):
         # 返回加权的 x
         return x * psi
 
-
+#那这里特征pooling，你要注意你要做的事情是将一个CHW的特征图变成C*1的特征向量
+#这个有一个明显的代码错误，这里你是想用自适应的全局平均池化，但是你应该用nn.AdaptiveAvgPool2d(),而不是3D
 class FeaturePooling(nn.Module):
     def __init__(self, output_size):
         super(FeaturePooling, self).__init__()
@@ -77,7 +88,10 @@ class FeaturePooling(nn.Module):
         output_features = self.adaptive_pooling(input_features)
         output_vector = output_features.view(output_features.size(0), -1)
         return output_vector
-    
+
+#1.代码结构需要调整，这种代码写起来简单，但是如果做修改的话，修改起来会很麻烦，做实验的可能东改改西改改，就忘记了之前的设置参数了
+#2.
+
 class UNet(nn.Module):
 
     def __init__(self, img_ch=3, output_ch=3):
@@ -147,7 +161,7 @@ class UNet(nn.Module):
         
         # decoding + concat path
         d5 = self.Up5(x5)
-        x4 = self.Att5(g=d5, x=x4)
+        x4 = self.Att5(g=d5, x=x4)   #注意力加的我没太看懂
         d5 = torch.cat((x4, d5), dim=1)
         d5 = self.Up_conv5(d5)
         print(d5.shape)
@@ -178,6 +192,7 @@ class UNet(nn.Module):
         pooling_d2=self.featurepooling(d2)
         feature_unet.append(pooling_d2)
 
+        
         d1 = self.Conv_1x1(d2)
         d1 = self.sigmoid(d1)
         print(d1.shape)
