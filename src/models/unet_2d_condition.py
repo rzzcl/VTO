@@ -955,7 +955,7 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
                 cross_attention_kwargs=cross_attention_kwargs,
                 encoder_attention_mask=encoder_attention_mask,
             )
-            encoder_hidden_states_index-=1
+            encoder_hidden_states_index+=1
 
         if is_controlnet:
             sample = sample + mid_block_additional_residual
@@ -983,7 +983,7 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
                     attention_mask=attention_mask,
                     encoder_attention_mask=encoder_attention_mask,
                 )
-                encoder_hidden_states_index-=1
+                encoder_hidden_states_index+=1
             else:
                 sample = upsample_block(
                     hidden_states=sample, temb=emb, res_hidden_states_tuple=res_samples, upsample_size=upsample_size
