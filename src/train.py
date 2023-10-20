@@ -21,7 +21,7 @@ from diffusers.utils.import_utils import is_xformers_available
 from tqdm.auto import tqdm
 from transformers import CLIPTextModel, CLIPTokenizer, CLIPVisionModelWithProjection, AutoProcessor
 from networks import ConditionGenerator, VGGLoss, load_checkpoint, save_checkpoint, make_grid
-
+from cascade_unet.model_feature_unet import CascadeUNetModel
 from dataset.dresscode import DressCodeDataset
 from dataset.vitonhd import VitonHDDataset
 from models.AutoencoderKL import AutoencoderKL
@@ -43,7 +43,7 @@ def parse_args():
     #data
     parser.add_argument("--dataset", type=str, required=True, choices=["dresscode", "vitonhd"], help="dataset to use")
     parser.add_argument('--dresscode_dataroot', type=str, help='DressCode dataroot')
-    parser.add_argument('--vitonhd_dataroot', type=str, help='VitonHD dataroot')
+    parser.add_argument('--vitonhd_dataroot', type=str,default="/root/data1/diffusion_virtual_try_on/dataset", help='VitonHD dataroot')
     parser.add_argument("--save_output_dir",type=str,required=True,help="The output directory where the model predictions and checkpoints will be written.")
     parser.add_argument("--test_order", type=str, default="unpaired", choices=["unpaired", "paired"])
     parser.add_argument("--cloth_input_type", type=str, choices=["warped", "none"], default='warped',help="cloth input type. If 'warped' use the warped cloth, if none do not use the cloth as input of the unet")
@@ -52,8 +52,10 @@ def parse_args():
     
     #model
     #预训练的stable-diffusion\cascade_unet模型
-    parser.add_argument("--pretrained_model_name_or_path", type=str,default="stabilityai/stable-diffusion-2-inpainting",help="Path to pretrained model or model identifier from huggingface.co/models.")
-    parser.add_argument("--cascade_checkpoint", type=str,default="/root/....",help="Path to pretrained cascade unet feature model")
+    parser.add_argument("--pretrained_model_name_or_path", type=str,default="/root/data1/VTO/stable_diffuison_checkpoint",help="Path to pretrained model or model identifier from huggingface.co/models.")
+    parser.add_argument("--cascade_checkpoint", type=str,default="",help="Path to pretrained cascade unet feature model")
+    parser.add_argument("--diff_checkpoint", type=str,default="",help="Path to pretrained cascade unet feature model")
+
 
     #随机种子
     parser.add_argument("--seed", type=int, default=1234, help="A seed for reproducible training.")
@@ -114,7 +116,7 @@ def parse_args():
     parser.add_argument(
         "--report_to",
         type=str,
-        default="wandb",
+        default="tensorboard",
         help=(
             'The integration to report the results and logs to. Supported platforms are `"tensorboard"`'
             ' (default), `"wandb"` and `"comet_ml"`. Use `"all"` to report to all integrations.'
@@ -136,7 +138,7 @@ def parse_args():
 
     return args
 
-def train(args, unet, vae,cascade_unet, optimizer, train_dataloader, lr_scheduler, test_dataloader, accelerator,noise_scheduler,weight_dtype):
+def train(args, unet, vae,cascade_unet, optimizer, train_dataloader, lr_scheduler, test_dataloader, accelerator,noise_scheduler,val_scheduler,weight_dtype):
     total_batch_size = args.train_batch_size * accelerator.num_processes* args.gradient_accumulation_steps
     logger.info("***** Running training *****")
     logger.info(f"  Num Epochs = {args.num_train_epochs}")
@@ -241,7 +243,7 @@ def train(args, unet, vae,cascade_unet, optimizer, train_dataloader, lr_schedule
                                 # text_encoder=text_encoder,
                                 vae=vae,
                                 unet=unwrapped_unet,
-                                cascade_unet=cacade_unet
+                                cascade_unet=cascade_unet,
                                 # tokenizer=tokenizer,
                                 scheduler=val_scheduler,
                             ).to(accelerator.device)
@@ -322,14 +324,7 @@ def main():
     #潜空间
     vae = AutoencoderKL.from_pretrained(args.pretrained_model_name_or_path, subfolder="vae")
     unet = UNet2DConditionModel.from_pretrained(args.pretrained_model_name_or_path, subfolder="unet")
-    cascade_unet = CascadeUNetModel(
-        in_channels=15,
-        model_channels=64,
-        out_channels=3,
-        channel_mult=(1, 2, 4, 8),
-        attention_resolutions=[4,8],
-        num_heads=8
-    )
+    cascade_unet = CascadeUNetModel()
 
     # Load cascade Checkpoint
     if not args.cascade_checkpoint == '' and os.path.exists(args.cascade_checkpoint):
@@ -428,7 +423,7 @@ def main():
         unet.load_state_dict(torch.load(args.diff_checkpoint))
         print("haven load diffusion chackpoint!")
     unet, optimizer, train_dataloader, lr_scheduler, test_dataloader = accelerator.prepare(
-                        unet, optimizer,cascade_unet, train_dataloader, lr_scheduler, test_dataloader)
+                        unet, optimizer, train_dataloader, lr_scheduler, test_dataloader)
     vae.to(accelerator.device, dtype=weight_dtype)
     cascade_unet.to(accelerator.device, dtype=weight_dtype)
 
@@ -444,7 +439,7 @@ def main():
 
     #---------------------------------------------------load checkpoint |  train  |   save checkpoint--------------------------------------------------------------------
     
-    train(args, unet, vae,cascade_unet, optimizer, train_dataloader, lr_scheduler, test_dataloader, accelerator,noise_scheduler,weight_dtype)
+    train(args, unet, vae,cascade_unet, optimizer, train_dataloader, lr_scheduler, test_dataloader, accelerator,noise_scheduler,val_scheduler,weight_dtype)
     # save_checkpoint(unet, os.path.join(args.checkpoint_dir, args.name, 'diff_model_final.pth'),args)
 
 if __name__ == "__main__":

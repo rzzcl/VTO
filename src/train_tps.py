@@ -279,7 +279,7 @@ def extract_images(dataloader: DataLoader, tps: ConvNet_TPS, refinement: UNetVan
             save_image(warpclo, os.path.join(save_path, cat, iname.replace(".jpg", "") + "_" + cname),
                        quality=95)
 
-#python src/train_tps.py --dataset [dresscode | vitonhd] --dresscode_dataroot <path> --vitonhd_dataroot <path> --checkpoints_dir <path> --exp_name <str>
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str, required=True, choices=["dresscode", "vitonhd"], help="dataset to use")
@@ -288,7 +288,7 @@ def parse_args():
     parser.add_argument('--vitonhd_dataroot', type=str, help='VitonHD dataroot')
     parser.add_argument('--exp_name', type=str, required=True, help='experiment name')
     parser.add_argument('-b', '--batch_size', type=int, default=16, help='train/test batch size')
-    parser.add_argument('-j', '--workers', type=int, default=0, help='number of data loading workers')
+    parser.add_argument('-j', '--workers', type=int, default=10, help='number of data loading workers')
     parser.add_argument("--height", type=int, default=512)
     parser.add_argument("--width", type=int, default=384)
     parser.add_argument('--const_weight', type=float, default=0.01, help='weight for the TPS constraint loss')
@@ -303,7 +303,7 @@ def parse_args():
     parser.add_argument('--l1_weight', type=float, default=1, help='weight for the L1 loss (refinement network)')
     parser.add_argument('--save_path', type=str, help='path to save the warped cloth images (if not provided, '
                                                       'the images will be saved in the data folder)')
-    parser.add_argument('--epochs_tps', type=int, default=2, help='number of epochs to train the TPS network')
+    parser.add_argument('--epochs_tps', type=int, default=1, help='number of epochs to train the TPS network')
     parser.add_argument('--epochs_refinement', type=int, default=1,
                         help='number of epochs to train the refinement network')
     args = parser.parse_args()
@@ -439,8 +439,7 @@ def main():
             save_name_unpaired = warped_cloth_root / 'warped_cloths_unpaired' / args.dataset
             extract_images(extraction_dataloader_paired, tps, refinement, save_name_unpaired, args.height, args.width)
             exit()
-   
-    #单纯提取特征
+
     if args.only_extraction and not os.path.exists(
             os.path.join(args.checkpoints_dir, args.exp_name, f"checkpoint_last.pth")):
         print("No checkpoint found, before extracting warped cloth images, please train the model first.")
@@ -448,10 +447,8 @@ def main():
 
     # Training loop for TPS training
     # Set training dataset height and width to (256, 192) since the TPS is trained using a lower resolution
-    #tps是使用较低分辨率训练的
     dataset_train.height = 256
     dataset_train.width = 192
-    #开始训练tps
     for e in range(start_epoch, args.epochs_tps):
         print(f"Epoch {e}/{args.epochs_tps}")
         print('train')

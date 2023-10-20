@@ -92,10 +92,10 @@ class FeaturePooling(nn.Module):
 #1.代码结构需要调整，这种代码写起来简单，但是如果做修改的话，修改起来会很麻烦，做实验的可能东改改西改改，就忘记了之前的设置参数了
 #2.
 
-class UNet(nn.Module):
+class CascadeUNetModel(nn.Module):
 
     def __init__(self, img_ch=3, output_ch=3):
-        super(UNet, self).__init__()
+        super(CascadeUNetModel, self).__init__()
 
         self.Maxpool = nn.MaxPool2d(kernel_size=2, stride=2)
 

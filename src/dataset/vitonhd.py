@@ -97,14 +97,14 @@ class VitonHDDataset(data.Dataset):
         self.c_names = c_names
         self.dataroot_names = dataroot_names
         #加载已经训练好的服装特征
-        if "clip_cloth_features" in self.outputlist:
-            self.clip_cloth_features = torch.load(os.path.join(
-                PROJECT_ROOT / 'data', 'clip_cloth_embeddings', 'vitonhd', f'{phase}_last_hidden_state_features.pt'),
-                map_location='cpu').detach().requires_grad_(False)
+        # if "clip_cloth_features" in self.outputlist:
+        #     self.clip_cloth_features = torch.load(os.path.join(
+        #         PROJECT_ROOT / 'data', 'clip_cloth_embeddings', 'vitonhd', f'{phase}_last_hidden_state_features.pt'),
+        #         map_location='cpu').detach().requires_grad_(False)
 
-            with open(os.path.join(
-                    PROJECT_ROOT / 'data', 'clip_cloth_embeddings', 'vitonhd', f'{phase}_features_names.pkl'), 'rb') as f:
-                self.clip_cloth_features_names = pickle.load(f)
+        #     with open(os.path.join(
+        #             PROJECT_ROOT / 'data', 'clip_cloth_embeddings', 'vitonhd', f'{phase}_features_names.pkl'), 'rb') as f:
+        #         self.clip_cloth_features_names = pickle.load(f)
 
     def __getitem__(self, index):
         c_name = self.c_names[index]
@@ -118,8 +118,8 @@ class VitonHDDataset(data.Dataset):
         #         random.shuffle(captions)
         #     captions = ", ".join(captions)
 
-        if "clip_cloth_features" in self.outputlist:  # Precomputed CLIP in-shop embeddings
-            clip_cloth_features = self.clip_cloth_features[self.clip_cloth_features_names.index(c_name)].float()
+        # if "clip_cloth_features" in self.outputlist:  # Precomputed CLIP in-shop embeddings
+        #     clip_cloth_features = self.clip_cloth_features[self.clip_cloth_features_names.index(c_name)].float()
 
         if "cloth" in self.outputlist:  # In-shop clothing image
             # Clothing image
@@ -190,8 +190,7 @@ class VitonHDDataset(data.Dataset):
                         (parse_array == 4).astype(np.float32) + \
                         (parse_array == 13).astype(np.float32)
             #parser_mask_fixed固定区域
-            parser_mask_fixed = (parse_array == 1).astype(np.float32) + \  
-                                (parse_array == 2).astype(np.float32) + \
+            parser_mask_fixed = (parse_array == 1).astype(np.float32) + (parse_array == 2).astype(np.float32) + \
                                 (parse_array == 18).astype(np.float32) + \
                                 (parse_array == 19).astype(np.float32)
 

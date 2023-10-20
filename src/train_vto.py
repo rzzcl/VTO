@@ -153,7 +153,7 @@ def parse_args():
     )
     #报告
     parser.add_argument(
-        "--report_to",
+        "--tensorboard",
         type=str,
         default="wandb",
         help=(
