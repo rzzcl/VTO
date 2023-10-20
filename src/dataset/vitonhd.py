@@ -24,16 +24,16 @@ from src.utils.posemap import kpoint_to_heatmap
 
 class VitonHDDataset(data.Dataset):
     def __init__(self,
-                 dataroot_path: str,
-                 phase: Literal['train', 'test'],
-                 radius=5,
-                 caption_filename: str = 'vitonhd.json',
-                 order: Literal['paired', 'unpaired'] = 'paired',
-                 outputlist: Tuple[str] = ('c_name', 'im_name', 'cloth', 'image', 'im_cloth', 'shape', 'pose_map',
-                                           'parse_array', 'im_mask', 'inpaint_mask', 'parse_mask_total',
-                                           'captions', 'category', 'warped_cloth', 'clip_cloth_features'),
-                 size: Tuple[int, int] = (512, 384),
-                 ):
+                dataroot_path: str,
+                phase: Literal['train', 'test'],
+                radius=5,
+                caption_filename: str = 'vitonhd.json',
+                order: Literal['paired', 'unpaired'] = 'paired',
+                outputlist: Tuple[str] = ('c_name', 'im_name', 'cloth', 'image', 'im_cloth', 'shape', 'pose_map',
+                                        'parse_array', 'im_mask', 'inpaint_mask', 'parse_mask_total',
+                                        'captions', 'category', 'warped_cloth', 'clip_cloth_features'),
+                size: Tuple[int, int] = (512, 384),
+                ):
 
         super(VitonHDDataset, self).__init__()
         self.dataroot = dataroot_path
@@ -60,23 +60,23 @@ class VitonHDDataset(data.Dataset):
                             'pose_map', 'parse_array', 'dense_labels', 'dense_uv', 'skeleton',
                             'im_mask', 'inpaint_mask', 'parse_mask_total', 'captions',
                             'category', 'warped_cloth', 'clip_cloth_features']
-
+        #用于验证 outputlist 中的所有元素是否都存在于 possible_outputs 列表中
         assert all(x in possible_outputs for x in outputlist)
 
         # Load Captions？？？？？
-        if "captions" in self.outputlist:
-            try:
-                with open(PROJECT_ROOT / 'data' / 'noun_chunks' / caption_filename, 'r') as f:
-                    self.captions_dict = json.load(f)
-            except FileNotFoundError as e:
-                print(f"File {caption_filename} not found. NO captions will be loaded.")
+        # if "captions" in self.outputlist:
+        #     try:
+        #         with open(PROJECT_ROOT / 'data' / 'noun_chunks' / caption_filename, 'r') as f:
+        #             self.captions_dict = json.load(f)
+        #     except FileNotFoundError as e:
+        #         print(f"File {caption_filename} not found. NO captions will be loaded.")
 
         dataroot = self.dataroot
         if phase == 'train':
             filename = os.path.join(dataroot, f"{phase}_pairs.txt")
         else:
             filename = os.path.join(dataroot, f"{phase}_pairs.txt")
-
+        #加载原始任务和服装
         with open(filename, 'r') as f:
             for line in f.readlines():
                 if phase == 'train':
@@ -111,12 +111,12 @@ class VitonHDDataset(data.Dataset):
         im_name = self.im_names[index]
         dataroot = self.dataroot_names[index]
         category = 'upper_body'
-        #captions是个啥？
-        if "captions" in self.outputlist:  # Load captions
-            captions = self.captions_dict[c_name.split('_')[0]]
-            if self.phase == 'train':
-                random.shuffle(captions)
-            captions = ", ".join(captions)
+        # #captions是个啥？
+        # if "captions" in self.outputlist:  # Load captions
+        #     captions = self.captions_dict[c_name.split('_')[0]]
+        #     if self.phase == 'train':
+        #         random.shuffle(captions)
+        #     captions = ", ".join(captions)
 
         if "clip_cloth_features" in self.outputlist:  # Precomputed CLIP in-shop embeddings
             clip_cloth_features = self.clip_cloth_features[self.clip_cloth_features_names.index(c_name)].float()
@@ -137,14 +137,14 @@ class VitonHDDataset(data.Dataset):
             if self.order == 'unpaired':
                 warped_cloth = Image.open(
                     os.path.join(PROJECT_ROOT, 'data', 'warped_cloths_unpaired', 'vitonhd', category,
-                                 im_name.replace(".jpg", "") + "_" + c_name))
+                                im_name.replace(".jpg", "") + "_" + c_name))
                 warped_cloth = warped_cloth.resize((self.width, self.height))
                 warped_cloth = self.transform(warped_cloth)  # [-1,1]
 
             elif self.order == 'paired':
                 warped_cloth = Image.open(
                     os.path.join(PROJECT_ROOT, 'data', 'warped_cloths', 'vitonhd', category,
-                                 im_name.replace(".jpg", "") + "_" + c_name))
+                                im_name.replace(".jpg", "") + "_" + c_name))
                 warped_cloth = warped_cloth.resize((self.width, self.height))
                 warped_cloth = self.transform(warped_cloth)  # [-1,1]
             else:
@@ -169,28 +169,28 @@ class VitonHDDataset(data.Dataset):
         }
 
         if "skeleton" in self.outputlist:
-            # Skeleton openpose_img
+            # Skeleton openpose_img 彩色点线图
             skeleton = Image.open(
                 os.path.join(dataroot, self.phase, 'openpose_img', im_name.replace('.jpg', '_rendered.png')))
             skeleton = skeleton.resize((self.width, self.height))
             skeleton = self.transform(skeleton)
 
         if "im_pose" in self.outputlist or "parser_mask" in self.outputlist or "im_mask" in self.outputlist or "parse_mask_total" in self.outputlist or "parse_array" in self.outputlist or "pose_map" in self.outputlist or "parse_array" in self.outputlist or "shape" in self.outputlist or "im_head" in self.outputlist:
-            # Label Map image-parse-v3
+            # Label Map image-parse-v3  原图的语义分割图
             parse_name = im_name.replace('.jpg', '.png')
             im_parse = Image.open(os.path.join(dataroot, self.phase, 'image-parse-v3', parse_name))
             im_parse = im_parse.resize((self.width, self.height), Image.NEAREST)
             im_parse_final = transforms.ToTensor()(im_parse) * 255
             parse_array = np.array(im_parse)
 
-            parse_shape = (parse_array > 0).astype(np.float32)
+            parse_shape = (parse_array > 0).astype(np.float32) #除背景外的人体轮廓
 
             parse_head = (parse_array == 1).astype(np.float32) + \
-                         (parse_array == 2).astype(np.float32) + \
-                         (parse_array == 4).astype(np.float32) + \
-                         (parse_array == 13).astype(np.float32)
-
-            parser_mask_fixed = (parse_array == 1).astype(np.float32) + \
+                        (parse_array == 2).astype(np.float32) + \
+                        (parse_array == 4).astype(np.float32) + \
+                        (parse_array == 13).astype(np.float32)
+            #parser_mask_fixed固定区域
+            parser_mask_fixed = (parse_array == 1).astype(np.float32) + \  
                                 (parse_array == 2).astype(np.float32) + \
                                 (parse_array == 18).astype(np.float32) + \
                                 (parse_array == 19).astype(np.float32)
@@ -200,34 +200,34 @@ class VitonHDDataset(data.Dataset):
             arms = (parse_array == 14).astype(np.float32) + (parse_array == 15).astype(np.float32)
 
             parse_cloth = (parse_array == 5).astype(np.float32) + \
-                          (parse_array == 6).astype(np.float32) + \
-                          (parse_array == 7).astype(np.float32)
+                        (parse_array == 6).astype(np.float32) + \
+                        (parse_array == 7).astype(np.float32)
             parse_mask = (parse_array == 5).astype(np.float32) + \
-                         (parse_array == 6).astype(np.float32) + \
-                         (parse_array == 7).astype(np.float32)
+                        (parse_array == 6).astype(np.float32) + \
+                        (parse_array == 7).astype(np.float32)
 
             parser_mask_fixed = parser_mask_fixed + (parse_array == 9).astype(np.float32) + \
                                 (parse_array == 12).astype(np.float32)  # the lower body is fixed
 
             parser_mask_changeable += np.logical_and(parse_array, np.logical_not(parser_mask_fixed))
-
+            #转为tensor
             parse_head = torch.from_numpy(parse_head)  # [0,1]
             parse_cloth = torch.from_numpy(parse_cloth)  # [0,1]
             parse_mask = torch.from_numpy(parse_mask)  # [0,1]
-            parser_mask_fixed = torch.from_numpy(parser_mask_fixed)
-            parser_mask_changeable = torch.from_numpy(parser_mask_changeable)
+            parser_mask_fixed = torch.from_numpy(parser_mask_fixed)  #固定区域：hair|left_shoe|right_shoe|bottom
+            parser_mask_changeable = torch.from_numpy(parser_mask_changeable)  #parser_mask_changeable 将包含所有可以改变的遮罩区域的像素，包括原始语义分割图像中除了固定遮罩区域外的其他部分。
 
             # dilation
-            parse_without_cloth = np.logical_and(parse_shape, np.logical_not(parse_mask))
+            parse_without_cloth = np.logical_and(parse_shape, np.logical_not(parse_mask))  # parse_without_cloth除去衣服之外的人体轮廓
             parse_mask = parse_mask.cpu().numpy()
 
             if "im_head" in self.outputlist:
                 # Masked cloth
-                im_head = image * parse_head - (1 - parse_head)
-            if "im_cloth" in self.outputlist:
+                im_head = image * parse_head - (1 - parse_head)  #通过对原始图像 image 与 parse_head 进行逐元素的乘法操作，得到仅保留头部区域的图像部分。然后对结果进行减法操作，相当于将非头部区域的像素设置为零。
+            if "im_cloth" in self.outputlist:   #只有衣服的图像
                 im_cloth = image * parse_cloth + (1 - parse_cloth)
 
-            # Shape
+            # Shape  ？？？人体整体轮廓
             parse_shape = Image.fromarray((parse_shape * 255).astype(np.uint8))
             parse_shape = parse_shape.resize((self.width // 16, self.height // 16), Image.BILINEAR)
             parse_shape = parse_shape.resize((self.width, self.height), Image.BILINEAR)
@@ -252,7 +252,7 @@ class VitonHDDataset(data.Dataset):
 
             pose_map = torch.zeros(point_num, self.height, self.width)
             r = self.radius * (self.height / 512.0)
-            im_pose = Image.new('L', (self.width, self.height))
+            im_pose = Image.new('L', (self.width, self.height))  #黑白点图的姿势
             pose_draw = ImageDraw.Draw(im_pose)
             neck = Image.new('L', (self.width, self.height))
             neck_draw = ImageDraw.Draw(neck)
@@ -268,9 +268,9 @@ class VitonHDDataset(data.Dataset):
                     pose_draw.rectangle((point_x - r, point_y - r, point_x + r, point_y + r), 'white', 'white')
                     if i == 2 or i == 5:
                         neck_draw.ellipse((point_x - r * 4, point_y - r * 4, point_x + r * 4, point_y + r * 4), 'white',
-                                          'white')
+                                        'white')
                 one_map = self.transform2D(one_map)
-                pose_map[i] = one_map[0]
+                pose_map[i] = one_map[0]  #黑白点图的姿势
 
             d = []
 
@@ -343,16 +343,16 @@ class VitonHDDataset(data.Dataset):
 
             parser_mask_fixed = np.logical_or(parser_mask_fixed, np.array(parse_head_2, dtype=np.uint16))
             parse_mask += np.logical_or(parse_mask, np.logical_and(np.array(parse_head, dtype=np.uint16),
-                                                                   np.logical_not(
-                                                                       np.array(parse_head_2, dtype=np.uint16))))
+                                                                np.logical_not(
+                                                                    np.array(parse_head_2, dtype=np.uint16))))
 
             # tune the amount of dilation here
             parse_mask = cv2.dilate(parse_mask, np.ones((5, 5), np.uint16), iterations=5)
             parse_mask = np.logical_and(parser_mask_changeable, np.logical_not(parse_mask))
             parse_mask_total = np.logical_or(parse_mask, parser_mask_fixed)
-            im_mask = image * parse_mask_total
+            im_mask = image * parse_mask_total   #im_mask
             inpaint_mask = 1 - parse_mask_total
-            inpaint_mask = inpaint_mask.unsqueeze(0)
+            inpaint_mask = inpaint_mask.unsqueeze(0)  #inpaint_mask
             parse_mask_total = parse_mask_total.numpy()
             parse_mask_total = parse_array * parse_mask_total
             parse_mask_total = torch.from_numpy(parse_mask_total)
