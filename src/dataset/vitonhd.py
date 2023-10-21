@@ -31,7 +31,7 @@ class VitonHDDataset(data.Dataset):
                 order: Literal['paired', 'unpaired'] = 'paired',
                 outputlist: Tuple[str] = ('c_name', 'im_name', 'cloth', 'image', 'im_cloth', 'shape', 'pose_map',
                                         'parse_array', 'im_mask', 'inpaint_mask', 'parse_mask_total',
-                                        'captions', 'category', 'warped_cloth', 'clip_cloth_features'),
+                                        'captions', 'category', 'warped_cloth'),
                 size: Tuple[int, int] = (512, 384),
                 ):
 
@@ -59,7 +59,7 @@ class VitonHDDataset(data.Dataset):
         possible_outputs = ['c_name', 'im_name', 'cloth', 'image', 'im_cloth', 'shape', 'im_head', 'im_pose',
                             'pose_map', 'parse_array', 'dense_labels', 'dense_uv', 'skeleton',
                             'im_mask', 'inpaint_mask', 'parse_mask_total', 'captions',
-                            'category', 'warped_cloth', 'clip_cloth_features']
+                            'category', 'warped_cloth']  #'clip_cloth_features'
         #用于验证 outputlist 中的所有元素是否都存在于 possible_outputs 列表中
         assert all(x in possible_outputs for x in outputlist)
 

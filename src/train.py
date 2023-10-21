@@ -14,11 +14,13 @@ import torchvision
 import transformers
 from accelerate import Accelerator
 from accelerate.logging import get_logger
-from diffusers import DDPMScheduler, UNet2DConditionModel, DDIMScheduler
+from models.unet_2d_condition import UNet2DConditionModel
+from diffusers import DDPMScheduler, DDIMScheduler
 from diffusers.optimization import get_scheduler
 from diffusers.utils import check_min_version
 from diffusers.utils.import_utils import is_xformers_available
 from tqdm.auto import tqdm
+from tensorboardX import SummaryWriter
 from transformers import CLIPTextModel, CLIPTokenizer, CLIPVisionModelWithProjection, AutoProcessor
 from networks import ConditionGenerator, VGGLoss, load_checkpoint, save_checkpoint, make_grid
 from cascade_unet.model_feature_unet import CascadeUNetModel
@@ -40,22 +42,25 @@ torch.multiprocessing.set_sharing_strategy('file_system')
 def parse_args():
 
     parser = argparse.ArgumentParser(description="VTO training script.")
+    parser.add_argument("--name", type=str, default="train_v1", help="name of this train/test")
     #data
     parser.add_argument("--dataset", type=str, required=True, choices=["dresscode", "vitonhd"], help="dataset to use")
     parser.add_argument('--dresscode_dataroot', type=str, help='DressCode dataroot')
     parser.add_argument('--vitonhd_dataroot', type=str,default="/root/data1/diffusion_virtual_try_on/dataset", help='VitonHD dataroot')
     parser.add_argument("--save_output_dir",type=str,required=True,help="The output directory where the model predictions and checkpoints will be written.")
+    parser.add_argument('--tensorboard_dir', type=str, default='/root/data1/VTO/tensorboard/', help='save tensorboard infos')
     parser.add_argument("--test_order", type=str, default="unpaired", choices=["unpaired", "paired"])
     parser.add_argument("--cloth_input_type", type=str, choices=["warped", "none"], default='warped',help="cloth input type. If 'warped' use the warped cloth, if none do not use the cloth as input of the unet")
     # parser.add_argument("--num_vstar", default=16, type=int, help="Number of predicted v* images to use")
     parser.add_argument("--use_clip_cloth_features", action="store_true",help="Whether to use precomputed clip cloth features是否使用clip提取的服装特征")
     
     #model
-    #预训练的stable-diffusion\cascade_unet模型
+    #预训练的stable-diffusion\cascade_unet模型,保存模型参数
     parser.add_argument("--pretrained_model_name_or_path", type=str,default="/root/data1/VTO/stable_diffuison_checkpoint",help="Path to pretrained model or model identifier from huggingface.co/models.")
     parser.add_argument("--cascade_checkpoint", type=str,default="",help="Path to pretrained cascade unet feature model")
-    parser.add_argument("--diff_checkpoint", type=str,default="",help="Path to pretrained cascade unet feature model")
-
+    parser.add_argument("--diff_checkpoint", type=str,default="",help="Path to save diffusion unet model")
+    parser.add_argument("--checkpointing_steps", type=int,default=500,help="Save checkpoint every 500 steps")
+    parser.add_argument("--tensorboard_count", type=int, default=200,help="get tensorboard every 200 steps")
 
     #随机种子
     parser.add_argument("--seed", type=int, default=1234, help="A seed for reproducible training.")
@@ -146,7 +151,10 @@ def train(args, unet, vae,cascade_unet, optimizer, train_dataloader, lr_schedule
     logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
     first_epoch = 0
     global_step = 0
-
+    if accelerator.is_main_process:
+        if not os.path.exists(args.tensorboard_dir):
+            os.makedirs(args.tensorboard_dir)
+        board = SummaryWriter(log_dir=os.path.join(args.tensorboard_dir, args.name))
     # Only show the progress bar once on each machine.进度条
     progress_bar = tqdm(range(global_step, args.max_train_steps), disable=not accelerator.is_local_main_process)
     progress_bar.set_description("Steps")
@@ -193,21 +201,22 @@ def train(args, unet, vae,cascade_unet, optimizer, train_dataloader, lr_schedule
 
                 if cloth_latents is not None:
                     cloth_latents = cloth_latents * vae.config.scaling_factor
-                
+                print(noisy_latents.shape,masked_image_latents.shape,pose_map.to(weight_dtype).shape,cloth_latents.shape)
                 unet_input = torch.cat(
                         [noisy_latents, masked_image_latents, pose_map.to(weight_dtype), cloth_latents], dim=1)
                 #---------------------------------------------------------------------------------------------------------------------
                 #------------------------------------------cascade_unet: extract feature feature-----------------------------------------------------------------
                 
-                encoder_hidden_states = cascade_unet(batch["cloth"].to(accelerator.device))  #list
-
+                # encoder_hidden_states = cascade_unet(batch["cloth"].to(accelerator.device))  #list train_batch_size
+                encoder_hidden_states = [torch.full((args.train_batch_size, 1, 768), 0.4) for _ in range(7)]
+                # encoder_hidden_states.to(accelerator.device)
                 #------------------------------------------get predition and conputer loss-----------------------------------------------------------------
                 model_pred = unet(unet_input, timesteps, encoder_hidden_states).sample
 
                 # loss in accelerator.autocast according to docs https://huggingface.co/docs/accelerate/v0.15.0/quicktour#mixed-precision-training
                 with accelerator.autocast():
                     loss = F.mse_loss(model_pred, target, reduction="mean")
-
+                    # print(loss,"*****************************************************")
                 # Gather the losses across all processes for logging (if we use distributed training).
                 avg_loss = accelerator.gather(loss.repeat(args.train_batch_size)).mean()
                 train_loss += avg_loss.item() / args.gradient_accumulation_steps
@@ -226,9 +235,11 @@ def train(args, unet, vae,cascade_unet, optimizer, train_dataloader, lr_schedule
                 global_step += 1
                 accelerator.log({"train_loss": train_loss}, step=global_step)
                 train_loss = 0.0
-
+                if accelerator.is_main_process and (global_step) % args.tensorboard_count == 0:
+                    board.add_scalar('Loss/diff_loss', loss.item(), step + 1)
                 # Save checkpoint every checkpointing_steps steps
                 if global_step % args.checkpointing_steps == 0:
+                    
                     unet.eval()                
                     if accelerator.is_main_process:
                         os.makedirs(os.path.join(args.output_dir, "checkpoint"), exist_ok=True)
@@ -292,6 +303,7 @@ def main():
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         mixed_precision=args.mixed_precision,
         log_with=args.report_to,
+        logging_dir=os.path.join(args.tensorboard_dir, args.name)
     )
 
     # Make one log on every process with the configuration for debugging.
@@ -330,7 +342,25 @@ def main():
     if not args.cascade_checkpoint == '' and os.path.exists(args.cascade_checkpoint):
         load_checkpoint(cascade_unet, args.cascade_checkpoint,args)
         print("haven load cascade chackpoint!")
+    #替换unet的第一个卷积层，以适应新的输入通道数
+    new_in_channels = 30
+    with torch.no_grad():
+        # Replace the first conv layer of the unet with a new one with the correct number of input channels
+        conv_new = torch.nn.Conv2d(
+            in_channels=new_in_channels,
+            out_channels=unet.conv_in.out_channels, #与原始 UNet 模型中第一个卷积层的输出通道数保持一致
+            kernel_size=3,
+            padding=1,
+        )
 
+        torch.nn.init.kaiming_normal_(conv_new.weight)  # Initialize new conv layer初始化
+        conv_new.weight.data = conv_new.weight.data * 0.  # Zero-initialize new conv layer权重置零
+
+        conv_new.weight.data[:, :9] = unet.conv_in.weight.data  # Copy weights from old conv layer：将 unet 原始模型中第一个卷积层的权重复制到 conv_new 中的前 9 个通道
+        conv_new.bias.data = unet.conv_in.bias.data  # Copy bias from old conv layer
+
+        unet.conv_in = conv_new  # replace conv layer in unet
+        unet.config['in_channels'] = new_in_channels  # update config ：更新 unet 模型的配置文件中的输入通道数：unet.config['in_channels'] = new_in_channels。
     # Freeze vae and text_encoder
     vae.requires_grad_(False)
 
@@ -358,7 +388,7 @@ def main():
     
     #------------------------------------------Load dataset--------------------------------------------------------------------------
     print("begin loading dataset......")
-    outputlist=['c_name', 'im_name', 'cloth', 'image', 'warped_cloth', 'clip_cloth_features','im_mask','pose_map']
+    outputlist=['c_name', 'im_name', 'cloth', 'image', 'warped_cloth','im_mask','pose_map']
     # Define datasets and dataloaders.
     if args.dataset == "dresscode":
         train_dataset = DressCodeDataset(
@@ -430,12 +460,12 @@ def main():
     #-------------------------------------------------------------------------------------------------------------------------------------
 
     #---------------------------------------------------set log wandb---------------------------------------------------------------------
-    if accelerator.is_main_process:
-        accelerator.init_trackers("Diff_vto", config=vars(args),
-                                init_kwargs={"wandb": {"name": os.path.basename(args.save_output_dir)}})
-    if args.report_to == 'wandb':
-        wandb_tracker = accelerator.get_tracker("wandb")
-        wandb_tracker.name = os.path.basename(args.save_output_dir)
+    # if accelerator.is_main_process:
+    #     accelerator.init_trackers("Diff_vto", config=vars(args),
+    #                             init_kwargs={"wandb": {"name": os.path.basename(args.save_output_dir)}})
+    # if args.report_to == 'wandb':
+    #     wandb_tracker = accelerator.get_tracker("wandb")
+    #     wandb_tracker.name = os.path.basename(args.save_output_dir)
 
     #---------------------------------------------------load checkpoint |  train  |   save checkpoint--------------------------------------------------------------------
     
