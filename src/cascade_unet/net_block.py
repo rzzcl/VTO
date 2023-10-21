@@ -13,10 +13,10 @@ class ResnetBlock(nn.Module):
         out_channels=out_channels if out_channels is not None else in_channels
         self.use_conv_shortcut=conv_shortcut
 
-        self.norm1=nn.GroupNorm(num_groups=num_groups)
+        self.norm1=nn.GroupNorm(num_groups=num_groups,num_channels=in_channels)
         self.conv1=nn.Conv2d(in_channels,out_channels,kernel_size=3,stride=1,padding=1)
 
-        self.norm2=nn.GroupNorm(num_groups=num_groups)
+        self.norm2=nn.GroupNorm(num_groups=num_groups,num_channels=out_channels)
         self.conv2=nn.Conv2d(out_channels,out_channels,kernel_size=3,stride=1,padding=1)
 
         self.conv_shortcut=None
@@ -24,7 +24,7 @@ class ResnetBlock(nn.Module):
             if self.use_conv_shortcut:
                 self.conv_shortcut=nn.Conv2d(in_channels,out_channels,kernel_size=3,stride=1,padding=1)
             else:
-                self.conv_shortcut=nn.Conv2d(in_channels,out_channels,kernel_size=1,padding=1,stride=1)
+                self.conv_shortcut=nn.Conv2d(in_channels,out_channels,kernel_size=1,padding=0,stride=1)
         
         self.dropout=nn.Dropout(dropout)
 
@@ -44,7 +44,7 @@ class ResnetBlock(nn.Module):
         
         return x+h
 
-class DownBlock(nn.Module):
+class DownLayer(nn.Module):
     def __init__(self,in_channels:Optional[int]=None, use_conv:bool=True,out_channels:Optional[int]=None,stride:int=2,padding:Optional[int]=1,) -> None:
         super().__init__()
         
@@ -58,7 +58,7 @@ class DownBlock(nn.Module):
     def forward(self,x):
         return self.down(x)
 
-class UpBlock(nn.Module):
+class UpLayer(nn.Module):
     def __init__(self, in_channels:Optional[int]=None,use_conv:bool=False,out_channels:Optional[int]=None) -> None:
         super().__init__()
 

@@ -21,9 +21,9 @@ import torch.utils.checkpoint
 from diffusers.configuration_utils import ConfigMixin, register_to_config
 from diffusers.loaders import UNet2DConditionLoadersMixin
 from diffusers.utils import BaseOutput, logging
-from diffusers.model.activations import get_activation
-from diffusers.model.attention_processor import AttentionProcessor, AttnProcessor
-from diffusers.model.embeddings import (
+from diffusers.models.activations import get_activation
+from diffusers.models.attention_processor import AttentionProcessor, AttnProcessor
+from diffusers.models.embeddings import (
     GaussianFourierProjection,
     ImageHintTimeEmbedding,
     ImageProjection,
@@ -34,8 +34,8 @@ from diffusers.model.embeddings import (
     TimestepEmbedding,
     Timesteps,
 )
-from diffusers.model.modeling_utils import ModelMixin
-from diffusers.model.unet_2d_blocks import (
+from diffusers.models.modeling_utils import ModelMixin
+from diffusers.models.unet_2d_blocks import (
     CrossAttnDownBlock2D,
     CrossAttnUpBlock2D,
     DownBlock2D,
