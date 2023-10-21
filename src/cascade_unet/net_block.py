@@ -3,7 +3,7 @@ from torch.nn import functional as F
 from typing import List,Optional,Dict
 import torch
 from einops import rearrange
-import xformers
+# import xformers
 
 
 class ResnetBlock(nn.Module):
@@ -104,62 +104,63 @@ class AttnBlock2D(nn.Module):
         query=self.to_q(self_feature)
         key=self.to_k(cross_feature)
         value=self.to_v(cross_feature)
-
+        _,_,H,W=query.shape
         
-        query=rearrange(query,'b (heads_num ,heads_dim) h w -> b heads_num  (h w) heads_dim  ',heads_num=self.heads_num)
-        key=rearrange(key,'b (heads_num ,heads_dim) h w -> b heads_num (h w) heads_dim  ',heads_num=self.heads_num)
-        value=rearrange(value,'b (heads_num ,heads_dim) h w -> b heads_num (h w) heads_dim ',heads_num=self.heads_num)
+        query=rearrange(query,'b (heads_num heads_dim) h w -> b heads_num  (h w) heads_dim',heads_num=self.heads_num)
+        key=rearrange(key,'b (heads_num heads_dim) h w -> b heads_num (h w) heads_dim  ',heads_num=self.heads_num)
+        value=rearrange(value,'b (heads_num heads_dim) h w -> b heads_num (h w) heads_dim ',heads_num=self.heads_num)
 
-        attn_map=einsum('b heads_num a c,b heads_num d c -> b heads_num a d',query,key)
+        attn_map=einsum('b h a c,b h d c -> b h a d',query,key)
         attn_scores=torch.softmax(attn_map/(self.head_dim**0.5),dim=-1)
 
-        attn_result=einsum('b heads_num a d -> b heads_num d c -> b heads_num a c',attn_scores,value)
-
+        attn_result=einsum('b h a d , b h d c -> b h a c',attn_scores,value)
+        attn_result=rearrange(attn_result,'b heads_num (h w) heads_dim -> b (heads_num heads_dim) h w ',h=H)
         attn_result=self.to_out(attn_result)
 
         return attn_result+residual
 
         
-#使用xformer优化注意力计算效率和显存占用
-class xformer_AttnBlock2D(nn.Module):
-    def __init__(self, query_dim:int,cross_dim:int=None,heads_num:int=8,head_dim:int=64,dropout:float=0.0) -> None:
-        super().__init__() 
+# #使用xformer优化注意力计算效率和显存占用
+# class xformer_AttnBlock2D(nn.Module):
+#     def __init__(self, query_dim:int,cross_dim:int=None,heads_num:int=8,head_dim:int=64,dropout:float=0.0) -> None:
+#         super().__init__() 
 
-        self.heads_num=heads_num
-        self.head_dim=head_dim
+#         self.heads_num=heads_num
+#         self.head_dim=head_dim
 
-        inner_dim=heads_num*head_dim
-        cross_dim=query_dim if cross_dim is None else cross_dim
+#         inner_dim=heads_num*head_dim
+#         cross_dim=query_dim if cross_dim is None else cross_dim
 
-        self.to_q=nn.Conv2d(query_dim,inner_dim,kernel_size=1)
-        self.to_k=nn.Conv2d(cross_dim,inner_dim,kernel_size=1)
-        self.to_v=nn.Conv2d(cross_dim,inner_dim,kernel_size=1)
+#         self.to_q=nn.Conv2d(query_dim,inner_dim,kernel_size=1)
+#         self.to_k=nn.Conv2d(cross_dim,inner_dim,kernel_size=1)
+#         self.to_v=nn.Conv2d(cross_dim,inner_dim,kernel_size=1)
 
-        self.to_out=nn.Sequential(
-            nn.Conv2d(inner_dim,query_dim,kernel_size=1),
-            nn.Dropout(dropout)
-        )
+#         self.to_out=nn.Sequential(
+#             nn.Conv2d(inner_dim,query_dim,kernel_size=1),
+#             nn.Dropout(dropout)
+#         )
 
-    def forward(self,self_feature:torch.Tensor,cross_feature:Optional[torch.Tensor]=None):
-        residual=self_feature
+#     def forward(self,self_feature:torch.Tensor,cross_feature:Optional[torch.Tensor]=None):
+#         residual=self_feature
 
-        #如果这里的attention是自注意力机制，那这里的cross_feature应该为None
-        cross_feature=self_feature if cross_feature is None else cross_feature  
+#         #如果这里的attention是自注意力机制，那这里的cross_feature应该为None
+#         cross_feature=self_feature if cross_feature is None else cross_feature  
 
-        query=self.to_q(self_feature)
-        key=self.to_k(cross_feature)
-        value=self.to_v(cross_feature)
+#         query=self.to_q(self_feature)
+#         key=self.to_k(cross_feature)
+#         value=self.to_v(cross_feature)
 
+#         _,_,H,W=query.shape
         
-        query=rearrange(query,'b (heads_num ,heads_dim) h w -> b heads_num (h w) heads_dim  ',heads_num=self.heads_num)
-        key=rearrange(key,'b (heads_num ,heads_dim) h w -> b heads_num (h w) heads_dim  ',heads_num=self.heads_num)
-        value=rearrange(value,'b (heads_num ,heads_dim) h w -> b heads_num (h w) heads_dim ',heads_num=self.heads_num)
+#         query=rearrange(query,'b (heads_num  heads_dim) h w -> b heads_num (h w) heads_dim  ',heads_num=self.heads_num)
+#         key=rearrange(key,'b (heads_num  heads_dim) h w -> b heads_num (h w) heads_dim  ',heads_num=self.heads_num)
+#         value=rearrange(value,'b (heads_num  heads_dim) h w -> b heads_num (h w) heads_dim ',heads_num=self.heads_num)
 
-        attn_result=xformers.ops.memory_efficient_attention(query,key,value)
-        
-        attn_result=self.to_out(attn_result)
+#         attn_result=xformers.ops.memory_efficient_attention(query,key,value)
+#         attn_result=rearrange(attn_result,'b heads_num (h w) heads_dim -> b (heads_num heads_dim) h w ',h=H)
+#         attn_result=self.to_out(attn_result)
 
-        return attn_result+residual
+#         return attn_result+residual
 
 
 
