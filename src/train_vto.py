@@ -153,7 +153,7 @@ def parse_args():
     )
     #报告
     parser.add_argument(
-        "--report_to",
+        "--tensorboard",
         type=str,
         default="wandb",
         help=(
@@ -649,7 +649,7 @@ def main():
 
                 #------------------------------------------重点在这！-------------------------------------------
                 #----------------------------------------------------------------------------------------------
-                
+                #encoder_hidden_states应该就是最后进去的特征
                 model_pred = unet(unet_input, timesteps, encoder_hidden_states).sample
 
                 # loss in accelerator.autocast according to docs https://huggingface.co/docs/accelerate/v0.15.0/quicktour#mixed-precision-training
@@ -697,10 +697,10 @@ def main():
 
                         with torch.no_grad():
                             val_pipe = StableDiffusionTryOnePipeline(
-                                text_encoder=text_encoder,
+                                # text_encoder=text_encoder,
                                 vae=vae,
                                 unet=unwrapped_unet,
-                                tokenizer=tokenizer,
+                                # tokenizer=tokenizer,
                                 scheduler=val_scheduler,
                             ).to(accelerator.device)
 
@@ -712,7 +712,7 @@ def main():
                                                                 args.text_usage, vision_encoder, processor,
                                                                 args.cloth_input_type, num_vstar=args.num_vstar)
 
-                            # Compute the metrics
+                            # Compute the metrics ssim kid 等
                             metrics = compute_metrics(
                                 os.path.join(args.output_dir, f"imgs_step_{global_step}_{args.test_order}"),
                                 args.test_order,
